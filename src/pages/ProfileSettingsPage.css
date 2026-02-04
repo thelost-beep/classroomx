@@ -1,0 +1,145 @@
+.settings-page {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.settings-header {
+    margin-bottom: var(--space-xl);
+}
+
+.settings-header h1 {
+    font-size: 1.875rem;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.settings-tabs {
+    display: flex;
+    gap: var(--space-sm);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 1px;
+}
+
+.settings-tab-btn {
+    padding: var(--space-sm) var(--space-lg);
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.settings-tab-btn:hover {
+    color: var(--color-primary);
+}
+
+.settings-tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.settings-content {
+    background: var(--color-surface);
+}
+
+.settings-section {
+    padding: var(--space-xl);
+}
+
+.settings-section h3 {
+    margin-bottom: var(--space-lg);
+    font-size: 1.25rem;
+}
+
+.form-group {
+    margin-bottom: var(--space-md);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+}
+
+.avatar-upload-section {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+    padding: var(--space-lg);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--radius-lg);
+}
+
+.current-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.current-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bestie-pill {
+    padding: 6px 12px;
+    background-color: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.bestie-pill:hover {
+    border-color: var(--color-primary);
+}
+
+.bestie-pill.active {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary-dark);
+    border-color: var(--color-primary);
+}
+
+.toggle-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+    cursor: pointer;
+}
+
+@media (max-width: 640px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
