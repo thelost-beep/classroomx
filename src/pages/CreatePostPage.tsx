@@ -3,12 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { Camera, BookOpen, Ghost, Sparkles, X, ChevronRight, Clock } from 'lucide-react';
 import type { Profile } from '../types/database';
+import ClassmateSearch from '../components/ClassmateSearch';
+import { compressImage } from '../utils/imageCompression';
 import './CreatePostPage.css';
+
+type PostType = 'memory' | 'photo' | 'secret' | 'capsule';
 
 const CreatePostPage: React.FC = () => {
     const [content, setContent] = useState('');
-    const [postType, setPostType] = useState<'text' | 'image' | 'video' | 'mixed'>('text');
+    const [activePostType, setActivePostType] = useState<PostType>('memory');
     const [mood, setMood] = useState('');
     const [visibility, setVisibility] = useState<'class' | 'selected' | 'private'>('class');
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -16,6 +21,9 @@ const CreatePostPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [classmates, setClassmates] = useState<Profile[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [unlockDate, setUnlockDate] = useState('');
+    const [mentionSearch, setMentionSearch] = useState<{ query: string; position: number } | null>(null);
+    const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
 
     const { user } = useAuth();
     const { showNotification } = useNotification();
@@ -27,7 +35,8 @@ const CreatePostPage: React.FC = () => {
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
-                    .neq('id', user?.id);
+                    .neq('id', user?.id)
+                    .order('name');
 
                 if (error) throw error;
                 setClassmates(data || []);
@@ -41,32 +50,44 @@ const CreatePostPage: React.FC = () => {
 
     const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
-        if (files.length > 5) {
+        if (files.length + mediaFiles.length > 5) {
             showNotification('Maximum 5 files allowed', 'error');
             return;
         }
-        setMediaFiles(files);
 
-        // Create previews
-        const previews = files.map(file => URL.createObjectURL(file));
-        setMediaPreviews(previews);
+        const newFiles = [...mediaFiles, ...files];
+        setMediaFiles(newFiles);
 
-        // Determine post type
-        if (files.length > 0) {
-            const hasImage = files.some(f => f.type.startsWith('image/'));
-            const hasVideo = files.some(f => f.type.startsWith('video/'));
-            if (hasImage && hasVideo) setPostType('mixed');
-            else if (hasVideo) setPostType('video');
-            else if (hasImage) setPostType('image');
-        } else {
-            setPostType('text');
-        }
+        const newPreviews = files.map(file => URL.createObjectURL(file));
+        setMediaPreviews([...mediaPreviews, ...newPreviews]);
     };
 
+    const removeMedia = (index: number) => {
+        const newFiles = [...mediaFiles];
+        newFiles.splice(index, 1);
+        setMediaFiles(newFiles);
+
+        const newPreviews = [...mediaPreviews];
+        URL.revokeObjectURL(newPreviews[index]);
+        newPreviews.splice(index, 1);
+        setMediaPreviews(newPreviews);
+    };
+
+    // ... inside the component ...
     const uploadMedia = async (postId: string) => {
         const uploadedMedia = [];
         for (let i = 0; i < mediaFiles.length; i++) {
-            const file = mediaFiles[i];
+            let file = mediaFiles[i];
+
+            // Compress if image
+            if (file.type.startsWith('image/')) {
+                try {
+                    file = await compressImage(file);
+                } catch (err) {
+                    console.error('Compression failed, uploading original:', err);
+                }
+            }
+
             const fileExt = file.name.split('.').pop();
             const fileName = `${postId}-${i}-${Math.random().toString(36).substring(7)}.${fileExt}`;
             const filePath = `${fileName}`;
@@ -75,10 +96,7 @@ const CreatePostPage: React.FC = () => {
                 .from('post-media')
                 .upload(filePath, file);
 
-            if (uploadError) {
-                console.error('Upload Error:', uploadError);
-                throw new Error(`Failed to upload file ${i + 1}: ${uploadError.message}`);
-            }
+            if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
                 .from('post-media')
@@ -95,7 +113,7 @@ const CreatePostPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !content.trim()) return;
+        if (!user || (!content.trim() && mediaFiles.length === 0)) return;
 
         setLoading(true);
 
@@ -106,24 +124,21 @@ const CreatePostPage: React.FC = () => {
                 .insert({
                     user_id: user.id,
                     content: content.trim(),
-                    post_type: postType,
+                    post_type: activePostType,
                     visibility,
                     mood: mood || null,
                 })
                 .select()
                 .single();
 
-            if (postError) {
-                console.error('Post DB Error:', postError);
-                throw new Error(`DB Error: ${postError.message}`);
-            }
+            if (postError) throw postError;
 
             // 2. Upload media
             if (mediaFiles.length > 0) {
                 const uploadedMedia = await uploadMedia(post.id);
                 const { error: mediaError } = await (supabase
                     .from('media') as any)
-                    .insert(uploadedMedia.map(m => ({
+                    .insert(uploadedMedia.map((m: any) => ({
                         post_id: post.id,
                         ...m,
                     })));
@@ -141,7 +156,20 @@ const CreatePostPage: React.FC = () => {
                     })));
             }
 
-            showNotification('Memory shared successfully! ✨', 'success');
+            // 4. Special logic for Time Capsules
+            if (activePostType === 'capsule' && unlockDate) {
+                await (supabase
+                    .from('time_capsules') as any)
+                    .insert({
+                        creator_id: user.id,
+                        capsule_type: 'personal',
+                        content: content.trim(),
+                        unlock_date: unlockDate,
+                        is_locked: true
+                    });
+            }
+
+            showNotification('shared successfully! ✨', 'success');
             navigate('/');
         } catch (error: any) {
             console.error('Final Creation Error:', error);
@@ -157,99 +185,181 @@ const CreatePostPage: React.FC = () => {
         );
     };
 
-    return (
-        <div className="create-post-page animate-fadeIn">
-            <div className="create-post-header">
-                <h2>Share a Memory</h2>
-                <p className="text-secondary">Capture the moment with Class 10</p>
-            </div>
+    const renderHeader = () => {
+        const types = [
+            { id: 'memory', icon: <BookOpen />, label: 'Memory', color: '#6366f1' },
+            { id: 'photo', icon: <Camera />, label: 'Photo/Video', color: '#ec4899' },
+            { id: 'secret', icon: <Ghost />, label: 'Secret', color: '#8b5cf6' },
+            { id: 'capsule', icon: <Clock />, label: 'Capsule', color: '#f59e0b' },
+        ];
 
-            <form onSubmit={handleSubmit} className="create-post-form card">
-                <div className="form-group">
-                    <label>Caption</label>
-                    <textarea
-                        className="input textarea"
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        placeholder="What's happening? #Class10Memories"
-                        required
-                        rows={4}
-                    />
+        return (
+            <div className="post-type-selector">
+                {types.map(t => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        className={`type-btn ${activePostType === t.id ? 'active' : ''}`}
+                        onClick={() => setActivePostType(t.id as PostType)}
+                        style={{ '--accent': t.color } as any}
+                    >
+                        <span className="type-icon">{t.icon}</span>
+                        <span className="type-label">{t.label}</span>
+                    </button>
+                ))}
+            </div>
+        );
+    };
+
+    return (
+        <div className="create-page animate-fadeIn">
+            <div className="create-container">
+                <div className="create-header">
+                    <h1 className="page-title">Create Post</h1>
+                    <p className="page-subtitle">Share something special with your class</p>
                 </div>
 
-                <div className="form-group">
-                    <label>Photos / Videos</label>
-                    <div className="media-upload-zone">
-                        <input
-                            type="file"
-                            accept="image/*,video/*"
-                            multiple
-                            onChange={handleMediaChange}
-                            id="file-upload"
-                            style={{ display: 'none' }}
-                        />
-                        <label htmlFor="file-upload" className="upload-btn">
-                            <span>📸 Attach Media (Max 5)</span>
-                        </label>
-                        <span className="file-count">{mediaFiles.length} files selected</span>
+                {renderHeader()}
+
+                <form onSubmit={handleSubmit} className="create-form card">
+                    <div className="content-area">
+                        <div className="user-mini-profile">
+                            <div className="mini-avatar">
+                                {user?.email?.[0].toUpperCase()}
+                            </div>
+                            <div className="mini-info">
+                                <span className="mini-name">{(user as any)?.name || 'You'}</span>
+                                <div className="visibility-badge">
+                                    <Sparkles size={12} />
+                                    <span>Sharing with Class</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="textarea-wrapper" style={{ position: 'relative' }}>
+                            <textarea
+                                ref={textAreaRef}
+                                className="post-textarea"
+                                value={content}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setContent(val);
+
+                                    const cursor = e.target.selectionStart;
+                                    const textBeforeCursor = val.slice(0, cursor);
+                                    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+
+                                    if (mentionMatch) {
+                                        setMentionSearch({
+                                            query: mentionMatch[1],
+                                            position: cursor
+                                        });
+                                    } else {
+                                        setMentionSearch(null);
+                                    }
+                                }}
+                                placeholder={
+                                    activePostType === 'secret' ? "Write a confession or a secret anonymously..." :
+                                        activePostType === 'capsule' ? "Write a message to your future self..." :
+                                            "What's on your mind?"
+                                }
+                                required={activePostType !== 'photo'}
+                                rows={6}
+                            />
+                            {mentionSearch && (
+                                <ClassmateSearch
+                                    query={mentionSearch.query}
+                                    onSelect={(student) => {
+                                        const before = content.slice(0, mentionSearch.position - mentionSearch.query.length - 1);
+                                        const after = content.slice(mentionSearch.position);
+                                        const newContent = `${before}@${student.name} ${after}`;
+                                        setContent(newContent);
+                                        setMentionSearch(null);
+                                        toggleTag(student.id);
+                                        textAreaRef.current?.focus();
+                                    }}
+                                    onClose={() => setMentionSearch(null)}
+                                />
+                            )}
+                        </div>
+
+                        {mediaPreviews.length > 0 && (
+                            <div className="media-previews-tray">
+                                {mediaPreviews.map((preview, index) => (
+                                    <div key={index} className="media-preview-item">
+                                        <img src={preview} alt="" />
+                                        <button type="button" className="remove-media-btn" onClick={() => removeMedia(index)}>
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
-                    {mediaPreviews.length > 0 && (
-                        <div className="previews-grid">
-                            {mediaPreviews.map((preview, index) => (
-                                <div key={index} className="preview-box">
-                                    {mediaFiles[index].type.startsWith('image/') ? (
-                                        <img src={preview} alt="" />
-                                    ) : (
-                                        <div className="video-placeholder">🎥 Video</div>
-                                    )}
+                    <div className="create-actions-tray">
+                        <div className="action-buttons">
+                            <label className="action-btn-pill">
+                                <Camera size={20} />
+                                <span>Add Photo/Video</span>
+                                <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    multiple
+                                    onChange={handleMediaChange}
+                                    style={{ display: 'none' }}
+                                />
+                            </label>
+
+                            <select className="action-select" value={mood} onChange={(e) => setMood(e.target.value)}>
+                                <option value="">Mood</option>
+                                <option value="happy">😊 Happy</option>
+                                <option value="nostalgic">🥺 Nostalgic</option>
+                                <option value="funny">😂 Funny</option>
+                                <option value="inspired">✨ Inspired</option>
+                            </select>
+
+                            {activePostType === 'capsule' && (
+                                <div className="unlock-date-input">
+                                    <Clock size={16} />
+                                    <input
+                                        type="date"
+                                        value={unlockDate}
+                                        onChange={(e) => setUnlockDate(e.target.value)}
+                                        required
+                                    />
                                 </div>
-                            ))}
+                            )}
+                        </div>
+                    </div>
+
+                    {activePostType !== 'secret' && (
+                        <div className="tags-section">
+                            <h4 className="section-label">Tag Classmates</h4>
+                            <div className="tags-list">
+                                {classmates.slice(0, 8).map(m => (
+                                    <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() => toggleTag(m.id)}
+                                        className={`tag-chip ${selectedTags.includes(m.id) ? 'active' : ''}`}
+                                    >
+                                        {m.name}
+                                    </button>
+                                ))}
+                                {classmates.length > 8 && <button type="button" className="more-tags-btn">+{classmates.length - 8} more</button>}
+                            </div>
                         </div>
                     )}
-                </div>
 
-                <div className="form-row">
-                    <div className="form-group">
-                        <label>Mood</label>
-                        <select className="input" value={mood} onChange={(e) => setMood(e.target.value)}>
-                            <option value="">None</option>
-                            <option value="happy">😊 Happy</option>
-                            <option value="nostalgic">🥺 Nostalgic</option>
-                            <option value="excited">🎉 Excited</option>
-                        </select>
+                    <div className="submit-section">
+                        <button type="submit" className="submit-btn" disabled={loading}>
+                            {loading ? 'Sharing...' : 'Share Memory'}
+                            <ChevronRight size={20} />
+                        </button>
                     </div>
-                    <div className="form-group">
-                        <label>Visibility</label>
-                        <select className="input" value={visibility} onChange={(e) => setVisibility(e.target.value as any)}>
-                            <option value="class">Everyone in Class</option>
-                            <option value="selected">Close Friends Only</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div className="form-group">
-                    <label>Tag Classmates</label>
-                    <div className="tags-selector">
-                        {classmates.map(m => (
-                            <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => toggleTag(m.id)}
-                                className={`tag-chip ${selectedTags.includes(m.id) ? 'active' : ''}`}
-                            >
-                                {m.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="form-actions pt-lg">
-                    <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
-                        {loading ? 'Posting Memory...' : 'Share Memory ✨'}
-                    </button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
     );
 };

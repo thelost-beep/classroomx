@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from './AuthContext';
 import '../components/Notification.css';
 
 type NotificationType = 'success' | 'error' | 'info';
@@ -17,6 +19,50 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const { user } = useAuth();
+
+    // Request browser notification permissions
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
+    // Global real-time listener for high-priority alerts
+    useEffect(() => {
+        if (!user) return;
+
+        const channel = supabase
+            .channel('global-notifications')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload: any) => {
+                    const { type, content } = payload.new;
+
+                    // Trigger Toast
+                    showNotification(content, type === 'broadcast' ? 'info' : 'success');
+
+                    // Trigger Native Browser Notification
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new window.Notification("ClassroomX Alert", {
+                            body: content,
+                            icon: '/logo192.png' // Fallback to common icon path
+                        });
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user]);
 
     const showNotification = useCallback((message: string, type: NotificationType = 'info') => {
         const id = Math.random().toString(36).substr(2, 9);

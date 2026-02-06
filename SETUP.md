@@ -28,9 +28,9 @@
 
 ### Create Initial Users
 1. Go to Authentication > Users in Supabase Dashboard
-2. For each of the 23 students, click "Add user" and create:
-   - Email: `firstname@classroomx.com`
-   - Password: `firstnameclass10`
+2. For each of the students, click "Add user" and create:
+   - Email: `[firstname]@classroomx.com`
+   - Password: `[a-secure-password]`
    - Auto-confirm user: Yes
 3. After creating all Supabase Auth users, you need to update their profiles:
    - Go to Table Editor > profiles
@@ -70,9 +70,9 @@ The app will be available at `http://localhost:5173`
 
 ### Login
 1. Open the app in your browser
-2. Use any of the pre-created credentials:
-   - Email: `aftab@classroomx. com`
-   - Password: `aftabclass10`
+2. Use your assigned credentials:
+   - Email: `[your-email]@classroomx.com`
+   - Password: `[your-secure-password]`
 3. You'll be forced to reset your password on first login
 
 ### Test Features

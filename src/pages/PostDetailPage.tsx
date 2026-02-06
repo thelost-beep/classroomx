@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { Heart, MessageCircle } from 'lucide-react';
 import type { PostWithDetails } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 import PostRenderer from '../components/PostRenderer';
@@ -99,47 +100,73 @@ const PostDetailPage: React.FC = () => {
             </div>
 
             <div className="detail-content">
-                <PostRenderer post={post} onUpdate={fetchPost} />
+                <div className="main-post-container">
+                    <PostRenderer post={post} onUpdate={fetchPost} />
+                </div>
 
-                <div className="detail-extras">
-                    <section className="likes-section card mt-lg">
-                        <h3>Likes ({post.like_count || 0})</h3>
-                        <div className="likes-list">
+                <div className="detail-extras grid grid-cols-1 lg:grid-cols-2 gap-lg mt-xl">
+                    <section className="likes-section glass-card p-lg">
+                        <div className="section-header mb-md">
+                            <Heart size={20} className="text-secondary" />
+                            <h3>Likes ({post.like_count || 0})</h3>
+                        </div>
+                        <div className="likes-grid">
                             {(!post.likes || (post.likes as any[]).length === 0) ? (
-                                <p className="text-tertiary">No likes yet.</p>
+                                <div className="empty-state py-lg text-center">
+                                    <p className="text-tertiary">No likes yet. Be the first!</p>
+                                </div>
                             ) : (
-                                (post.likes as any[]).map((like: any) => (
-                                    <div key={like.id} className="like-user">
-                                        <div className="avatar-sm">
-                                            {like.profiles?.name?.[0]?.toUpperCase() || 'U'}
-                                        </div>
-                                        <span>{like.profiles?.name}</span>
-                                    </div>
-                                ))
+                                <div className="user-avatars-list">
+                                    {(post.likes as any[]).map((like: any) => (
+                                        <Link key={like.id} to={`/profile/${like.user_id}`} className="user-avatar-item tooltip" data-tip={like.profiles?.name}>
+                                            <div className="avatar-md squircle">
+                                                {like.profiles?.avatar_url ? (
+                                                    <img src={like.profiles.avatar_url} alt={like.profiles.name} />
+                                                ) : (
+                                                    <span>{like.profiles?.name?.[0]?.toUpperCase()}</span>
+                                                )}
+                                            </div>
+                                            <span className="user-name-sm">{like.profiles?.name}</span>
+                                        </Link>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </section>
 
-                    <section className="comments-full-section card mt-lg">
-                        <h3>All Comments ({post.comment_count || 0})</h3>
-                        <div className="comments-full-list">
+                    <section className="comments-full-section glass-card p-lg">
+                        <div className="section-header mb-md">
+                            <MessageCircle size={20} className="text-secondary" />
+                            <h3>All Comments ({post.comment_count || 0})</h3>
+                        </div>
+                        <div className="comments-elaborate-list">
                             {(!post.comments || (post.comments as any[]).length === 0) ? (
-                                <p className="text-tertiary">No comments yet.</p>
+                                <div className="empty-state py-lg text-center">
+                                    <p className="text-tertiary">No comments yet. Start the conversation!</p>
+                                </div>
                             ) : (
                                 (post.comments as any[]).map((comment: any) => (
-                                    <div key={comment.id} className="comment-full-item">
-                                        <div className="comment-user-header">
-                                            <div className="avatar-sm">
-                                                {comment.profiles?.name?.[0]?.toUpperCase() || 'U'}
-                                            </div>
-                                            <div className="comment-user-meta">
-                                                <span className="font-semibold">{comment.profiles?.name}</span>
-                                                <span className="text-xs text-tertiary">
-                                                    {new Date(comment.created_at).toLocaleDateString()}
+                                    <div key={comment.id} className="comment-premium-item">
+                                        <div className="comment-header">
+                                            <Link to={`/profile/${comment.user_id}`} className="avatar-sm squircle">
+                                                {comment.profiles?.avatar_url ? (
+                                                    <img src={comment.profiles.avatar_url} alt={comment.profiles.name} />
+                                                ) : (
+                                                    <span>{comment.profiles?.name?.[0]?.toUpperCase() || 'U'}</span>
+                                                )}
+                                            </Link>
+                                            <div className="comment-meta">
+                                                <Link to={`/profile/${comment.user_id}`} className="commenter-name">
+                                                    {comment.profiles?.name}
+                                                </Link>
+                                                <span className="comment-time">
+                                                    {new Date(comment.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
                                         </div>
-                                        <p className="comment-body">{comment.content}</p>
+                                        <div className="comment-content">
+                                            <p>{comment.content}</p>
+                                        </div>
                                     </div>
                                 ))
                             )}

@@ -1,119 +1,119 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import NotificationHub from './NotificationHub';
+import {
+    Home,
+    Search,
+    PlusSquare,
+    MessageCircle,
+    User as UserIcon,
+    Settings,
+    Shield,
+    LogOut,
+    Bell
+} from 'lucide-react';
 import './MainLayout.css';
 
 const MainLayout: React.FC = () => {
+    const [isHubOpen, setIsHubOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const { user, profile, signOut } = useAuth();
     const navigate = useNavigate();
-    const [isMemoriesOpen, setIsMemoriesOpen] = useState(false);
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+    const fetchUnreadCount = async () => {
+        if (!user) return;
+        const { count, error } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_read', false);
+
+        if (!error) setUnreadCount(count || 0);
+    };
+
+    useEffect(() => {
+        if (!user) return;
+        fetchUnreadCount();
+        const channel = supabase.channel('notification-count')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => fetchUnreadCount())
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [user?.id]);
 
     const handleSignOut = async () => {
         await signOut();
         navigate('/login');
     };
 
-    const mainLinks = [
-        { to: '/', icon: '🏠', label: 'Home Feed' },
-        { to: '/directory', icon: '👥', label: 'Classmates' },
-        { to: `/profile/${user?.id}`, icon: '👤', label: 'My Profile' },
-    ];
-
-    const socialLinks = [
-        { to: '/create-post', icon: '✍️', label: 'Share' },
-        { to: '/personal-space', icon: '📔', label: 'Journal' },
-        { to: '/teacher-letters', icon: '✉️', label: 'Mail' },
-    ];
-
-    const memoryLinks = [
-        { to: '/memory-vault', icon: '📸', label: 'Vault' },
-        { to: '/confessions', icon: '🤐', label: 'Secrets' },
-        { to: '/time-capsules', icon: '⏳', label: 'Capsules' },
+    const navLinks = [
+        { to: '/', icon: <Home size={24} />, label: 'Home' },
+        { to: '/explore', icon: <Search size={24} />, label: 'Explore' },
+        { to: '/create-post', icon: <PlusSquare size={24} />, label: 'Create', special: true },
+        { to: '/chat', icon: <MessageCircle size={24} />, label: 'Chat' },
+        { to: `/profile/${user?.id}`, icon: <UserIcon size={24} />, label: 'Profile' },
     ];
 
     return (
-        <div className={`main-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        <div className={`main-layout ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
             {/* Desktop Sidebar */}
-            <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+            <aside className="sidebar">
                 <div className="sidebar-header">
-                    {!isSidebarCollapsed && <h1>ClassroomX</h1>}
+                    {!isCollapsed && <h1 className="logo-text">ClassroomX</h1>}
                     <button
-                        className="collapse-toggle"
-                        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                        title={isSidebarCollapsed ? "Expand" : "Collapse"}
+                        className="sidebar-toggle"
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        title={isCollapsed ? "Expand" : "Collapse"}
                     >
-                        {isSidebarCollapsed ? '👉' : '👈'}
+                        {isCollapsed ? <PlusSquare size={20} style={{ transform: 'rotate(45deg)' }} /> : <PlusSquare size={20} />}
                     </button>
                 </div>
 
                 <nav className="sidebar-nav">
-                    <div className="nav-group">
-                        {!isSidebarCollapsed && <span className="group-label">Main</span>}
-                        {mainLinks.map(item => (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                end={item.to === '/'}
-                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                            >
-                                <span className="nav-icon">{item.icon}</span>
-                                {!isSidebarCollapsed && <span className="nav-label">{item.label}</span>}
-                            </NavLink>
-                        ))}
-                    </div>
-
-                    <div className="nav-group">
-                        {!isSidebarCollapsed && <span className="group-label">Social</span>}
-                        {socialLinks.map(item => (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                            >
-                                <span className="nav-icon">{item.icon}</span>
-                                {!isSidebarCollapsed && <span className="nav-label">{item.label}</span>}
-                            </NavLink>
-                        ))}
-                    </div>
+                    {navLinks.map(item => (
+                        <NavLink
+                            key={item.to}
+                            to={item.to}
+                            end={item.to === '/'}
+                            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${item.special ? 'create-btn' : ''}`}
+                            title={isCollapsed ? item.label : undefined}
+                        >
+                            <span className="nav-icon">{item.icon}</span>
+                            {!isCollapsed && <span className="nav-label">{item.label}</span>}
+                        </NavLink>
+                    ))}
 
                     <div className="nav-group">
                         <button
-                            className={`nav-item collapse-trigger ${isMemoriesOpen ? 'open' : ''}`}
-                            onClick={() => {
-                                if (isSidebarCollapsed) setIsSidebarCollapsed(false);
-                                setIsMemoriesOpen(!isMemoriesOpen);
-                            }}
+                            onClick={() => setIsHubOpen(true)}
+                            className="nav-item hub-trigger"
+                            title={isCollapsed ? "Notifications" : undefined}
                         >
-                            <div className="trigger-main">
-                                <span className="nav-icon">🎬</span>
-                                {!isSidebarCollapsed && <span className="nav-label">Memories</span>}
-                            </div>
-                            {!isSidebarCollapsed && <span className="arrow">{isMemoriesOpen ? '▾' : '▸'}</span>}
+                            <span className="nav-icon relative">
+                                <Bell size={22} />
+                                {unreadCount > 0 && <span className="unread-badge">{unreadCount}</span>}
+                            </span>
+                            {!isCollapsed && <span className="nav-label">Notifications</span>}
                         </button>
-                        <div className={`collapsible-group ${isMemoriesOpen && !isSidebarCollapsed ? 'expanded' : ''}`}>
-                            {memoryLinks.map(item => (
-                                <NavLink
-                                    key={item.to}
-                                    to={item.to}
-                                    className={({ isActive }) => `nav-item sub-item ${isActive ? 'active' : ''}`}
-                                >
-                                    <span className="nav-icon">{item.icon}</span>
-                                    {!isSidebarCollapsed && <span className="nav-label">{item.label}</span>}
-                                </NavLink>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="nav-group mt-auto">
-                        <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                            <span className="nav-icon">⚙️</span>
-                            {!isSidebarCollapsed && <span className="nav-label">Settings</span>}
+                        <NavLink
+                            to="/settings"
+                            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                            title={isCollapsed ? "Settings" : undefined}
+                        >
+                            <span className="nav-icon"><Settings size={22} /></span>
+                            {!isCollapsed && <span className="nav-label">Settings</span>}
                         </NavLink>
                         {profile?.role === 'admin' && (
-                            <NavLink to="/admin" className={({ isActive }) => `nav-item admin-nav ${isActive ? 'active' : ''}`}>
-                                <span className="nav-icon">🛡️</span>
-                                {!isSidebarCollapsed && <span className="nav-label">Admin</span>}
+                            <NavLink
+                                to="/admin"
+                                className={({ isActive }) => `nav-item admin-nav ${isActive ? 'active' : ''}`}
+                                title={isCollapsed ? "Admin" : undefined}
+                            >
+                                <span className="nav-icon"><Shield size={22} /></span>
+                                {!isCollapsed && <span className="nav-label">Admin</span>}
                             </NavLink>
                         )}
                     </div>
@@ -128,92 +128,55 @@ const MainLayout: React.FC = () => {
                                 profile?.name?.[0]?.toUpperCase() || 'U'
                             )}
                         </div>
-                        {!isSidebarCollapsed && (
-                            <div className="user-info">
-                                <span className="user-name">{profile?.name.split(' ')[0]}</span>
-                                <button onClick={handleSignOut} className="sign-out-btn">Logout</button>
-                            </div>
-                        )}
+                        <div className="user-info">
+                            {!isCollapsed && <span className="user-name">{profile?.name.split(' ')[0]}</span>}
+                            <button onClick={handleSignOut} className="sign-out-btn" title="Logout">
+                                <LogOut size={18} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </aside>
 
             <main className="main-content">
                 <header className="mobile-header">
-                    <h1>ClassroomX</h1>
-                    {profile?.role === 'admin' && (
-                        <NavLink to="/admin" className="mobile-admin-btn">🛡️</NavLink>
-                    )}
+                    <h1 className="logo-text">ClassroomX</h1>
+                    <div className="header-actions">
+                        <button onClick={() => setIsHubOpen(true)} className="header-icon-btn relative">
+                            <Bell size={20} />
+                            {unreadCount > 0 && <span className="unread-badge-mobile">{unreadCount}</span>}
+                        </button>
+                        {profile?.role === 'admin' && (
+                            <NavLink to="/admin" className="header-icon-btn"><Shield size={20} /></NavLink>
+                        )}
+                        <NavLink to="/settings" className="header-icon-btn"><Settings size={20} /></NavLink>
+                    </div>
                 </header>
 
                 <div className="content-inner">
                     <Outlet />
                 </div>
 
-                {/* Better Mobile Navigation */}
+                {/* Bottom Navigation */}
                 <nav className="mobile-bottom-nav">
-                    <NavLink to="/" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
-                        <span className="nav-icon">🏠</span>
-                        <span className="nav-text">Home</span>
-                    </NavLink>
-                    <NavLink to="/directory" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
-                        <span className="nav-icon">👥</span>
-                        <span className="nav-text">Batch</span>
-                    </NavLink>
-                    <NavLink to="/create-post" className="mobile-nav-item create-btn-mobile">
-                        <div className="plus-icon">＋</div>
-                    </NavLink>
-                    <NavLink to={`/profile/${user?.id}`} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
-                        <span className="nav-icon">👤</span>
-                        <span className="nav-text">Profile</span>
-                    </NavLink>
-                    <button
-                        className={`mobile-nav-item ${isMemoriesOpen ? 'active' : ''}`}
-                        onClick={() => setIsMemoriesOpen(!isMemoriesOpen)}
-                    >
-                        <span className="nav-icon">🎬</span>
-                        <span className="nav-text">More</span>
-                    </button>
-
-                    {/* Mobile Memories Overlay/Menu */}
-                    {isMemoriesOpen && (
-                        <div className="mobile-memories-menu animate-slideUp">
-                            <div className="menu-header">
-                                <h3>Memories</h3>
-                                <button onClick={() => setIsMemoriesOpen(false)}>✕</button>
-                            </div>
-                            <div className="menu-grid">
-                                {memoryLinks.map(link => (
-                                    <NavLink
-                                        key={link.to}
-                                        to={link.to}
-                                        className="menu-item"
-                                        onClick={() => setIsMemoriesOpen(false)}
-                                    >
-                                        <span className="icon">{link.icon}</span>
-                                        <span className="label">{link.label}</span>
-                                    </NavLink>
-                                ))}
-                                {socialLinks.map(link => (
-                                    <NavLink
-                                        key={link.to}
-                                        to={link.to}
-                                        className="menu-item"
-                                        onClick={() => setIsMemoriesOpen(false)}
-                                    >
-                                        <span className="icon">{link.icon}</span>
-                                        <span className="label">{link.label}</span>
-                                    </NavLink>
-                                ))}
-                                <NavLink to="/settings" className="menu-item" onClick={() => setIsMemoriesOpen(false)}>
-                                    <span className="icon">⚙️</span>
-                                    <span className="label">Settings</span>
-                                </NavLink>
-                            </div>
-                        </div>
-                    )}
+                    {navLinks.map(item => (
+                        <NavLink
+                            key={item.to}
+                            to={item.to}
+                            end={item.to === '/'}
+                            className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''} ${item.special ? 'create-btn-mobile' : ''}`}
+                        >
+                            <span className="nav-icon">{item.icon}</span>
+                            <span className="nav-text">{item.label}</span>
+                        </NavLink>
+                    ))}
                 </nav>
             </main>
+
+            <NotificationHub
+                isOpen={isHubOpen}
+                onClose={() => setIsHubOpen(false)}
+            />
         </div>
     );
 };

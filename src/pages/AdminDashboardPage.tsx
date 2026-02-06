@@ -6,8 +6,9 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './AdminDashboardPage.css';
 
 const AdminDashboardPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'confessions' | 'users'>('confessions');
+    const [activeTab, setActiveTab] = useState<'confessions' | 'users' | 'reports'>('confessions');
     const [pendingConfessions, setPendingConfessions] = useState<any[]>([]);
+    const [postReports, setPostReports] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -30,16 +31,22 @@ const AdminDashboardPage: React.FC = () => {
     const [createName, setCreateName] = useState('');
     const [createRole, setCreateRole] = useState<'student' | 'teacher' | 'admin'>('student');
 
+    // Admin Broadcast State
+    const [batchTitle, setBatchTitle] = useState('');
+    const [targetRole, setTargetRole] = useState<'all' | 'student' | 'teacher'>('all');
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [confessionsRes, usersRes] = await Promise.all([
+            const [confessionsRes, usersRes, reportsRes] = await Promise.all([
                 supabase.from('confessions').select('*, profiles:user_id(name)').eq('status', 'pending'),
-                supabase.from('profiles').select('*').order('name', { ascending: true })
+                supabase.from('profiles').select('*').order('name', { ascending: true }),
+                supabase.from('post_reports').select('*, reporter:reporter_id(name), post:post_id(*, author:user_id(name))').eq('status', 'pending')
             ]);
 
             setPendingConfessions(confessionsRes.data || []);
             setUsers(usersRes.data || []);
+            setPostReports(reportsRes.data || []);
         } catch (error) {
             console.error('Error fetching admin data:', error);
         } finally {
@@ -70,6 +77,33 @@ const AdminDashboardPage: React.FC = () => {
             if (error) throw error;
             setPendingConfessions(prev => prev.filter(c => c.id !== id));
             showNotification('Confession rejected.', 'info');
+        } catch (error: any) {
+            showNotification(error.message, 'error');
+        } finally { setActionLoading(false); }
+    };
+
+    const dismissReport = async (id: string) => {
+        setActionLoading(true);
+        try {
+            const { error } = await (supabase.from('post_reports') as any).update({ status: 'dismissed' }).eq('id', id);
+            if (error) throw error;
+            setPostReports(prev => prev.filter(r => r.id !== id));
+            showNotification('Report dismissed.', 'info');
+        } catch (error: any) {
+            showNotification(error.message, 'error');
+        } finally { setActionLoading(false); }
+    };
+
+    const deleteReportedPost = async (reportId: string, postId: string) => {
+        if (!window.confirm('Are you sure? This will PERMANENTLY delete the post and all its comments/media.')) return;
+        setActionLoading(true);
+        try {
+            // 1. Delete the post (cascades to comments/media/reports)
+            const { error: postError } = await supabase.from('posts').delete().eq('id', postId);
+            if (postError) throw postError;
+
+            setPostReports(prev => prev.filter(r => r.id !== reportId));
+            showNotification('Post and report deleted.', 'success');
         } catch (error: any) {
             showNotification(error.message, 'error');
         } finally { setActionLoading(false); }
@@ -124,11 +158,20 @@ const AdminDashboardPage: React.FC = () => {
         e.preventDefault();
         setActionLoading(true);
         try {
-            // In a real PWA this would trigger a push service. 
-            // Here we simulate by showing a success toast and setting the groundwork.
-            showNotification(`Bulk Notification sent to ${users.length} devices! 📱`, 'success');
+            const { error } = await (supabase.from('admin_broadcasts') as any).insert({
+                admin_id: profile?.id,
+                title: batchTitle,
+                content: batchMessage,
+                target_role: targetRole
+            });
+
+            if (error) throw error;
+
+            showNotification(`Broadcast "${batchTitle}" sent to all ${targetRole}s! 🚀`, 'success');
             setShowBatchModal(false);
+            setBatchTitle('');
             setBatchMessage('');
+            setTargetRole('all');
         } catch (error: any) {
             showNotification(error.message, 'error');
         } finally {
@@ -161,7 +204,10 @@ const AdminDashboardPage: React.FC = () => {
                 <h1>Admin Dashboard</h1>
                 <div className="admin-tabs">
                     <button className={`tab-btn ${activeTab === 'confessions' ? 'active' : ''}`} onClick={() => setActiveTab('confessions')}>
-                        Moderation ({pendingConfessions.length})
+                        Confessions ({pendingConfessions.length})
+                    </button>
+                    <button className={`tab-btn ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>
+                        Reports ({postReports.length})
                     </button>
                     <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
                         Users ({users.length})
@@ -186,6 +232,36 @@ const AdminDashboardPage: React.FC = () => {
                                         <div className="flex gap-sm">
                                             <button onClick={() => approveConfession(c.id)} className="btn btn-primary btn-sm" disabled={actionLoading}>Approve</button>
                                             <button onClick={() => rejectConfession(c.id)} className="btn btn-secondary btn-sm" disabled={actionLoading}>Reject</button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </section>
+                ) : activeTab === 'reports' ? (
+                    <section className="moderation-queue card">
+                        <h3>Reported Posts</h3>
+                        <div className="queue-list mt-md">
+                            {postReports.length === 0 ? (
+                                <p className="text-tertiary">No pending reports.</p>
+                            ) : (
+                                postReports.map((r) => (
+                                    <div key={r.id} className="p-md mb-md border-bottom flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-sm mb-xs">
+                                                <span className="text-xs font-bold text-error uppercase">⚠️ Reported</span>
+                                                <span className="text-xs text-secondary">By: {r.reporter?.name}</span>
+                                            </div>
+                                            <p className="font-semibold text-sm mb-xs">Reason: "{r.reason}"</p>
+                                            <div className="p-sm bg-bg-tertiary rounded-md border text-sm italic text-secondary">
+                                                <span className="font-bold text-xs not-italic text-primary block mb-1">Post Content (by {r.post?.author?.name}):</span>
+                                                "{r.post?.content?.substring(0, 150)}{r.post?.content?.length > 150 ? '...' : ''}"
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-sm ml-md">
+                                            <button onClick={() => deleteReportedPost(r.id, r.post_id)} className="btn btn-primary btn-sm" disabled={actionLoading}>Delete Post</button>
+                                            <button onClick={() => dismissReport(r.id)} className="btn btn-secondary btn-sm" disabled={actionLoading}>Dismiss</button>
+                                            <button onClick={() => window.open(`/post/${r.post_id}`, '_blank')} className="btn btn-secondary btn-sm text-xs">View Full Post</button>
                                         </div>
                                     </div>
                                 ))
@@ -299,11 +375,30 @@ const AdminDashboardPage: React.FC = () => {
             {showBatchModal && (
                 <div className="modal-overlay">
                     <div className="modal-content card animate-scaleIn">
-                        <h3>Send Batch Notification</h3>
-                        <p className="text-secondary text-sm mb-md">This will send a direct alert to everyone's devices.</p>
+                        <h3>Send Admin Broadcast</h3>
+                        <p className="text-secondary text-sm mb-md">This will be visible to targeted users on their home feed and notification hub.</p>
                         <form onSubmit={handleBatchNotify}>
                             <div className="form-group">
-                                <label>Message</label>
+                                <label>Broadcast Title</label>
+                                <input
+                                    type="text"
+                                    className="input"
+                                    value={batchTitle}
+                                    onChange={e => setBatchTitle(e.target.value)}
+                                    required
+                                    placeholder="e.g., Annual Sports Day 2026"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Target Audience</label>
+                                <select className="input" value={targetRole} onChange={e => setTargetRole(e.target.value as any)}>
+                                    <option value="all">Everyone</option>
+                                    <option value="student">Students Only</option>
+                                    <option value="teacher">Teachers Only</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Message Content</label>
                                 <textarea
                                     className="input textarea"
                                     value={batchMessage}
@@ -315,7 +410,7 @@ const AdminDashboardPage: React.FC = () => {
                             </div>
                             <div className="modal-actions">
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowBatchModal(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-primary" disabled={actionLoading}>🚀 Send to All</button>
+                                <button type="submit" className="btn btn-primary" disabled={actionLoading}>🚀 Post Broadcast</button>
                             </div>
                         </form>
                     </div>

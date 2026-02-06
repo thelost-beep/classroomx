@@ -1,52 +1,273 @@
 .home-page {
-    max-width: 600px;
+    max-width: 1200px;
     margin: 0 auto;
+    padding-bottom: 100px;
 }
 
-.home-header {
+.stories-tray {
+    display: flex;
+    gap: var(--space-md);
+    overflow-x: auto;
+    padding: var(--space-md) 0;
     margin-bottom: var(--space-xl);
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
-.home-header h2 {
+.stories-tray::-webkit-scrollbar {
+    display: none;
+}
+
+.story-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 70px;
+}
+
+.story-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid var(--color-primary);
+    background-color: var(--color-bg-tertiary);
+    padding: 2px;
+}
+
+.story-circle-add {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background-color: var(--color-bg-tertiary);
+    border: 2px dashed var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
+    color: var(--color-text-tertiary);
+}
+
+.story-item span {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+}
+
+.home-content {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: var(--space-2xl);
+    align-items: start;
 }
 
 .feed-container {
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    gap: var(--space-xl);
 }
 
-.empty-state {
-    text-align: center;
+/* Teacher Letter Card Styles */
+.teacher-letter-card {
+    background: linear-gradient(135deg, #fffcf5 0%, #fff 100%);
+    border: 1px solid #ffe8cc;
     padding: var(--space-2xl);
+    border-radius: var(--radius-2xl);
+    position: relative;
+    box-shadow: 0 15px 35px rgba(255, 147, 0, 0.08);
+    margin-bottom: var(--space-3xl);
 }
 
-.empty-state h3 {
-    color: var(--color-text-secondary);
-    font-size: 1.125rem;
+.dark .teacher-letter-card {
+    background: linear-gradient(135deg, #2d2417 0%, #1e293b 100%);
+    border-color: rgba(255, 147, 0, 0.2);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
-/* Confession Card in Feed */
-.confession-card {
-    background-color: var(--color-bg-tertiary);
-    border: none;
-}
-
-.confession-tag {
-    background-color: var(--color-primary-light);
-    color: var(--color-primary-dark);
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
+.card-tag {
+    position: absolute;
+    top: -12px;
+    left: var(--space-xl);
+    background-color: #ff922b;
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.confession-text-large {
-    font-size: 1.125rem;
-    line-height: 1.5;
+.letter-header {
+    margin-bottom: var(--space-lg);
+}
+
+.teacher-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.teacher-avatar {
+    width: 48px;
+    height: 48px;
+    background-color: white;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.teacher-name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.letter-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.75rem;
+    margin-bottom: var(--space-md);
+    color: #495057;
+}
+
+.letter-body {
+    line-height: 1.8;
     color: var(--color-text-primary);
+    font-size: 1.15rem;
+    margin-bottom: var(--space-xl);
+    opacity: 0.9;
+}
+
+.handwritten {
+    font-family: 'Dancing Script', cursive;
+    font-size: 1.5rem;
+    color: #ff922b;
+}
+
+/* Sidebar Styles */
+.feed-sidebar {
+    position: sticky;
+    top: var(--space-xl);
+    height: fit-content;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+.sidebar-section {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+}
+
+.section-title {
+    font-weight: 800;
+    margin-bottom: var(--space-md);
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.update-item {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.update-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background-color: var(--color-bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary);
+}
+
+.update-text p {
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.update-text span {
+    font-size: 0.7rem;
+    color: var(--color-text-tertiary);
+}
+
+.locked-capsule {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+@media (max-width: 900px) {
+    .home-content {
+        grid-template-columns: 1fr;
+    }
+
+    .feed-sidebar {
+        display: none;
+    }
+}
+
+/* Announcements Widget */
+.announcements {
+    border: 2px solid var(--color-primary-light);
+    box-shadow: 0 4px 15px rgba(var(--color-primary-rgb), 0.1);
+}
+
+.broadcast-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.broadcast-item {
+    display: flex;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.broadcast-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.broadcast-indicator {
+    width: 4px;
+    height: auto;
+    background-color: var(--color-primary);
+    border-radius: var(--radius-full);
+}
+
+.broadcast-body h6 {
+    margin: 0 0 2px 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.broadcast-body p {
+    font-size: 0.8rem;
+    margin: 0 0 4px 0;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+}
+
+.broadcast-date {
+    font-size: 0.7rem;
+    color: var(--color-text-tertiary);
+    font-weight: 600;
 }

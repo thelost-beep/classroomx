@@ -13,9 +13,10 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(255, 255, 255, 0.9);
+    background-color: var(--color-bg-primary);
+    opacity: 0.95;
     z-index: 2000;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
 }
 
 .spinner-wrapper {

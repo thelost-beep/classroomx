@@ -1,0 +1,63 @@
+.classmate-search-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    width: 280px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    z-index: 100;
+    margin-bottom: var(--space-xs);
+    box-shadow: var(--shadow-xl);
+}
+
+.search-loading,
+.search-empty {
+    padding: var(--space-md);
+    text-align: center;
+    color: var(--color-text-tertiary);
+    font-size: 0.875rem;
+}
+
+.search-item {
+    padding: var(--space-sm) var(--space-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    cursor: pointer;
+    transition: background-color var(--transition-base);
+}
+
+.search-item:hover {
+    background-color: var(--color-bg-tertiary);
+}
+
+.item-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: var(--color-primary-faded);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.item-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.item-avatar span {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.item-name {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--color-text-primary);
+}

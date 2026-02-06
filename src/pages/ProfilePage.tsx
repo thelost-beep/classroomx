@@ -6,6 +6,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import type { Profile, PostWithDetails } from '../types/database';
 import PostRenderer from '../components/PostRenderer';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { MapPin, Briefcase, Calendar, Heart, MessageCircle, Grid as GridIcon, List as ListIcon, Settings, UserPlus, Sparkles } from 'lucide-react';
 import './ProfilePage.css';
 
 const ProfilePage: React.FC = () => {
@@ -14,58 +15,91 @@ const ProfilePage: React.FC = () => {
     const { showNotification } = useNotification();
     const [profile, setProfile] = useState<Profile | null>(null);
     const [posts, setPosts] = useState<PostWithDetails[]>([]);
-    const [bestiesData, setBestiesData] = useState<any[]>([]);
+    const [bestFriends, setBestFriends] = useState<any[]>([]);
+    const [bfRequestStatus, setBfRequestStatus] = useState<'pending_sent' | 'pending_received' | 'accepted' | null>(null);
     const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const navigate = useNavigate();
 
     const fetchProfileData = async () => {
         if (!id) return;
         try {
             setLoading(true);
-            const { data: profileData, error: profileError } = await (supabase
-                .from('profiles') as any)
-                .select('*')
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, name, avatar_url, bio, hometown, dream_job, dob, is_first_login')
                 .eq('id', id)
                 .single();
 
             if (profileError) throw profileError;
-            setProfile(profileData);
+            setProfile(profileData as Profile);
 
-            // Fetch Besties if any
-            if (profileData.besties && profileData.besties.length > 0) {
-                try {
-                    const { data: bData, error: bError } = await (supabase.from('profiles') as any)
-                        .select('id, name, avatar_url')
-                        .in('id', profileData.besties);
-                    if (!bError) setBestiesData(bData || []);
-                } catch (err) {
-                    console.error('Error fetching besties:', err);
+            // Fetch Best Friends
+            const { data: bfData, error: bfError } = await (supabase
+                .from('best_friends') as any)
+                .select('friend_id, profiles:friend_id(id, name, avatar_url)')
+                .eq('user_id', id);
+
+            if (!bfError) setBestFriends((bfData as any[]).map(d => d.profiles) || []);
+
+            // Check BF Request Status
+            if (user && user.id !== id) {
+                const { data: request } = await (supabase
+                    .from('best_friend_requests') as any)
+                    .select('*')
+                    .or(`and(sender_id.eq.${user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${user.id})`)
+                    .maybeSingle();
+
+                if (request) {
+                    if (request.status === 'accepted') {
+                        setBfRequestStatus('accepted');
+                    } else if (request.sender_id === user.id) {
+                        setBfRequestStatus('pending_sent');
+                    } else {
+                        setBfRequestStatus('pending_received');
+                    }
+                } else {
+                    setBfRequestStatus(null);
                 }
             }
 
-            const { data: postsData, error: postsError } = await (supabase
-                .from('posts') as any)
+            // Fetch Private Data (Role) if it's the current user's profile
+            if (user && user.id === id) {
+                const { data: privateData } = await supabase
+                    .from('private_profiles' as any)
+                    .select('role')
+                    .eq('id', id)
+                    .single();
+
+                if (privateData) {
+                    setProfile(prev => prev ? { ...prev, role: privateData.role } : null);
+                }
+            }
+
+            // Fetch Posts
+            const { data: postsData, error: postsError } = await supabase
+                .from('posts')
                 .select(`
                     *,
-                    profiles:user_id (*),
-                    media (*),
-                    likes (*),
-                    comments (*, profiles:user_id (*)),
-                    tags (*, profiles:tagged_user_id (*))
+                    profiles:user_id (id, name, avatar_url),
+                    media (id, file_url, file_type),
+                    likes (id, user_id),
+                    comments (id, content, created_at, profiles:user_id (id, name, avatar_url)),
+                    tags (id, tagged_user_id, profiles:tagged_user_id (id, name, avatar_url))
                 `)
                 .eq('user_id', id)
                 .order('created_at', { ascending: false });
 
             if (postsError) throw postsError;
 
-            const postsWithCounts = (postsData || []).map((post: any) => ({
-                ...post,
-                like_count: post.likes?.length || 0,
-                comment_count: post.comments?.length || 0,
-                is_liked: post.likes?.some((like: any) => like.user_id === user?.id) || false,
+            const processedPosts = (postsData || []).map((p: any) => ({
+                ...p,
+                like_count: p.likes?.length || 0,
+                comment_count: p.comments?.length || 0,
+                is_liked: p.likes?.some((like: any) => like.user_id === user?.id) || false
             }));
 
-            setPosts(postsWithCounts);
+            setPosts(processedPosts);
         } catch (error) {
             console.error('Error fetching profile:', error);
         } finally {
@@ -77,122 +111,186 @@ const ProfilePage: React.FC = () => {
         if (id) fetchProfileData();
     }, [id, user?.id]);
 
-    if (loading) return <LoadingSpinner fullPage message="Accessing the vault..." />;
+    const handleBFAction = async (action: 'send' | 'accept' | 'reject' | 'cancel') => {
+        if (!user || !id) return;
+        try {
+            if (action === 'send') {
+                await (supabase.from('best_friend_requests') as any).insert({ sender_id: user.id, receiver_id: id });
+                setBfRequestStatus('pending_sent');
+                showNotification('Best friend request sent! ✨', 'success');
+            } else if (action === 'accept') {
+                await (supabase.from('best_friend_requests') as any)
+                    .update({ status: 'accepted' })
+                    .eq('sender_id', id)
+                    .eq('receiver_id', user.id);
+                setBfRequestStatus('accepted');
+                showNotification('You are now Best Friends! 💖', 'success');
+            } else if (action === 'reject' || action === 'cancel') {
+                await (supabase.from('best_friend_requests') as any)
+                    .delete()
+                    .or(`and(sender_id.eq.${user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${user.id})`);
+                setBfRequestStatus(null);
+                showNotification(action === 'reject' ? 'Request ignored' : 'Request cancelled', 'info');
+            }
+        } catch (error) {
+            console.error('Error in BF action:', error);
+            showNotification('Action failed', 'error');
+        }
+    };
+
+    if (loading) return <LoadingSpinner fullPage message="Unlocking the profile..." />;
 
     if (!profile) return (
-        <div className="container text-center p-xl">
-            <h2>User not found</h2>
-            <button onClick={() => navigate(-1)} className="btn btn-secondary mt-md">Go Back</button>
+        <div className="empty-state">
+            <h2>Classmate not found</h2>
+            <button onClick={() => navigate(-1)} className="primary-action-btn">Go Back</button>
         </div>
     );
 
     const isOwnProfile = user?.id === profile.id;
-    const priv = profile.privacy_settings || { show_email: true, show_phone: false, show_birthday: true, show_socials: true };
 
     return (
         <div className="profile-page animate-fadeIn">
-            <div className="profile-hero card">
+            <div className="profile-header-card card">
                 <div className="profile-cover"></div>
-                <div className="profile-main">
-                    <div className="profile-avatar-large">
-                        {profile.avatar_url ? (
-                            <img src={profile.avatar_url} alt={profile.name} />
-                        ) : (
-                            <span>{profile.name[0].toUpperCase()}</span>
-                        )}
+                <div className="profile-essentials">
+                    <div className="profile-avatar-wrapper">
+                        <div className="profile-avatar-large">
+                            {profile.avatar_url ? (
+                                <img src={profile.avatar_url} alt={profile.name} />
+                            ) : (
+                                <span>{profile.name[0].toUpperCase()}</span>
+                            )}
+                        </div>
                     </div>
-                    <div className="profile-details-main">
-                        <div className="profile-name-row">
-                            <h1>{profile.name}</h1>
-                            <div className="profile-actions">
-                                {!isOwnProfile && (
-                                    <button
-                                        onClick={() => showNotification(`Sent a "Hi" to ${profile.name}! 👋`, 'success')}
-                                        className="btn btn-primary btn-sm"
-                                    >
-                                        👋 Send Hi
+
+                    <div className="profile-main-info">
+                        <div className="name-row">
+                            <h1 className="profile-name">{profile.name}</h1>
+                            {profile.role === 'teacher' && <span className="teacher-badge">Teacher</span>}
+                        </div>
+                        <p className="profile-handle">@classmate_{profile.id.substring(0, 4)}</p>
+                        <div className="profile-stats-row">
+                            <div className="stat-item"><strong>{posts.length}</strong> memories</div>
+                            <div className="stat-item"><strong>{bestFriends.length}</strong> friends</div>
+                        </div>
+                        {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+                    </div>
+
+                    <div className="profile-actions-column">
+                        {isOwnProfile ? (
+                            <Link to="/settings" className="profile-btn secondary">
+                                <Settings size={18} />
+                                Edit Profile
+                            </Link>
+                        ) : (
+                            <div className="profile-actions-buttons">
+                                {bfRequestStatus === 'accepted' ? (
+                                    <button className="profile-btn secondary">
+                                        <Heart size={18} fill="currentColor" />
+                                        Besties
+                                    </button>
+                                ) : bfRequestStatus === 'pending_sent' ? (
+                                    <button className="profile-btn outline" onClick={() => handleBFAction('cancel')}>
+                                        Request Sent
+                                    </button>
+                                ) : bfRequestStatus === 'pending_received' ? (
+                                    <div className="dual-actions">
+                                        <button className="profile-btn primary" onClick={() => handleBFAction('accept')}>
+                                            Accept
+                                        </button>
+                                        <button className="profile-btn outline" onClick={() => handleBFAction('reject')}>
+                                            Ignore
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button className="profile-btn primary" onClick={() => handleBFAction('send')}>
+                                        <UserPlus size={18} />
+                                        Add Bestie
                                     </button>
                                 )}
-                                {isOwnProfile && (
-                                    <Link to="/settings" className="btn btn-secondary btn-sm edit-profile-btn">
-                                        ⚙️ Edit
-                                    </Link>
-                                )}
+                                <button className="profile-btn outline" onClick={() => navigate(`/chat/${id}`)}>
+                                    Message
+                                </button>
                             </div>
-                        </div>
-                        <span className={`role-badge ${profile.role}`}>{profile.role}</span>
-                        {profile.quote && <p className="profile-quote">"{profile.quote}"</p>}
+                        )}
                     </div>
+                </div>
+
+                <div className="profile-details-grid">
+                    {profile.hometown && (
+                        <div className="p-detail">
+                            <MapPin size={16} />
+                            <span>{profile.hometown}</span>
+                        </div>
+                    )}
+                    {profile.dream_job && (
+                        <div className="p-detail">
+                            <Briefcase size={16} />
+                            <span>{profile.dream_job}</span>
+                        </div>
+                    )}
+                    {profile.dob && (
+                        <div className="p-detail">
+                            <Calendar size={16} />
+                            <span>Born {new Date(profile.dob).toLocaleDateString()}</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="profile-content-grid">
-                <div className="profile-info-column">
-                    <div className="stats-box card">
-                        <div className="stat">
-                            <span className="stat-value">{posts.length}</span>
-                            <span className="stat-label">Memories</span>
-                        </div>
-                        <div className="stat">
-                            <span className="stat-value">
-                                {posts.reduce((acc, p) => acc + (p.like_count || 0), 0)}
-                            </span>
-                            <span className="stat-label">Likes</span>
-                        </div>
-                    </div>
+            <div className="profile-tabs">
+                <div className="tabs-header">
+                    <button
+                        className={`tab-link ${viewMode === 'grid' ? 'active' : ''}`}
+                        onClick={() => setViewMode('grid')}
+                    >
+                        <GridIcon size={18} />
+                        Memories
+                    </button>
+                    <button
+                        className={`tab-link ${viewMode === 'list' ? 'active' : ''}`}
+                        onClick={() => setViewMode('list')}
+                    >
+                        <ListIcon size={18} />
+                        Timeline
+                    </button>
+                </div>
 
-                    {bestiesData.length > 0 && (
-                        <div className="besties-box card mt-lg">
-                            <h3>Best Friends</h3>
-                            <div className="besties-list-horizontal">
-                                {bestiesData.map(b => (
-                                    <Link key={b.id} to={`/profile/${b.id}`} className="bestie-link" title={b.name}>
-                                        <div className="bestie-avatar">
-                                            {b.avatar_url ? <img src={b.avatar_url} /> : b.name[0]}
+                <div className={`tab-content ${viewMode}`}>
+                    {posts.length === 0 ? (
+                        <div className="empty-feed">
+                            <Sparkles size={48} />
+                            <p>No memories shared yet</p>
+                            {isOwnProfile && <Link to="/create-post" className="link">Share your first one</Link>}
+                        </div>
+                    ) : (
+                        viewMode === 'grid' ? (
+                            <div className="memory-grid">
+                                {posts.map(post => (
+                                    <Link to={`/post/${post.id}`} key={post.id} className="memory-grid-item">
+                                        {post.media && (post.media as any[]).length > 0 ? (
+                                            <img src={(post.media as any[])[0].file_url} alt="" />
+                                        ) : (
+                                            <div className="text-memory-preview">
+                                                <p>{post.content}</p>
+                                            </div>
+                                        )}
+                                        <div className="grid-overlay">
+                                            <span><Heart size={16} fill="white" /> {post.like_count}</span>
+                                            <span><MessageCircle size={16} fill="white" /> {post.comment_count}</span>
                                         </div>
                                     </Link>
                                 ))}
                             </div>
-                        </div>
-                    )}
-
-                    <div className="details-box card mt-lg">
-                        <h3>About</h3>
-                        <div className="detail-list">
-                            {profile.bio && <div className="detail-item"><p className="bio-text">{profile.bio}</p></div>}
-                            {(isOwnProfile || priv.show_birthday) && profile.birthday && <div className="detail-item"><span>🎂 Birthday:</span> {new Date(profile.birthday).toLocaleDateString()}</div>}
-                            {profile.hometown && <div className="detail-item"><span>📍 From:</span> {profile.hometown}</div>}
-                            {profile.dream_job && <div className="detail-item"><span>🚀 Goal:</span> {profile.dream_job}</div>}
-                            {(isOwnProfile || priv.show_email) && <div className="detail-item"><span>📧 Email:</span> {profile.email}</div>}
-                            {(isOwnProfile || priv.show_phone) && profile.phone && <div className="detail-item"><span>📞 Phone:</span> {profile.phone}</div>}
-                        </div>
-                    </div>
-
-                    {(isOwnProfile || priv.show_socials) && (profile.instagram_handle || profile.twitter_handle || profile.linkedin_handle) && (
-                        <div className="socials-box card mt-lg">
-                            <h3>Socials</h3>
-                            <div className="social-links">
-                                {profile.instagram_handle && <a href={`https://instagram.com/${profile.instagram_handle.replace('@', '')}`} target="_blank" rel="noreferrer" className="social-link inst">Instagram</a>}
-                                {profile.twitter_handle && <a href={`https://twitter.com/${profile.twitter_handle.replace('@', '')}`} target="_blank" rel="noreferrer" className="social-link twit">Twitter</a>}
-                                {profile.linkedin_handle && <a href={`https://linkedin.com/in/${profile.linkedin_handle}`} target="_blank" rel="noreferrer" className="social-link linkd">LinkedIn</a>}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="profile-feed-column">
-                    <h2 className="section-title">Timeline</h2>
-                    <div className="profile-feed">
-                        {posts.length === 0 ? (
-                            <div className="empty-state card">
-                                <p className="text-tertiary">No memories shared yet.</p>
-                            </div>
                         ) : (
-                            posts.map(post => (
-                                <PostRenderer key={post.id} post={post} onUpdate={fetchProfileData} />
-                            ))
-                        )}
-                    </div>
+                            <div className="memory-list">
+                                {posts.map(post => (
+                                    <PostRenderer key={post.id} post={post} onUpdate={fetchProfileData} />
+                                ))}
+                            </div>
+                        )
+                    )}
                 </div>
             </div>
         </div>

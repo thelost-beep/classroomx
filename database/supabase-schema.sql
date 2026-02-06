@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   is_first_login BOOLEAN DEFAULT true,
   avatar_url TEXT,
   bio TEXT,
+  hometown TEXT,
+  dream_job TEXT,
+  dob DATE,
+  privacy_settings JSONB DEFAULT '{"show_email": true, "show_birthday": true, "show_socials": true}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -29,7 +33,7 @@ CREATE TABLE IF NOT EXISTS posts (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   content TEXT NOT NULL,
-  post_type TEXT NOT NULL DEFAULT 'text' CHECK (post_type IN ('text', 'image', 'video', 'mixed')),
+  post_type TEXT NOT NULL DEFAULT 'memory' CHECK (post_type IN ('memory', 'photo', 'secret', 'capsule', 'teacher_letter')),
   visibility TEXT DEFAULT 'class' CHECK (visibility IN ('class', 'selected', 'private')),
   mood TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -99,9 +103,43 @@ CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   actor_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('like', 'comment', 'tag', 'capsule', 'letter')),
+  type TEXT NOT NULL CHECK (type IN ('like', 'comment', 'tag', 'capsule', 'letter', 'message')),
   reference_id UUID,
   is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ======================================================================================
+-- NEW TABLES FOR PRD V2
+-- ======================================================================================
+
+CREATE TABLE IF NOT EXISTS best_friends (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  friend_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, friend_id)
+);
+
+CREATE TABLE IF NOT EXISTS chats (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT,
+  type TEXT NOT NULL DEFAULT '1to1' CHECK (type IN ('1to1', 'group')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_participants (
+  chat_id UUID REFERENCES chats(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  PRIMARY KEY (chat_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  chat_id UUID REFERENCES chats(id) ON DELETE CASCADE NOT NULL,
+  sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  media_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -134,6 +172,10 @@ ALTER TABLE teacher_letters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alumni_updates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE best_friends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 -- Base Policies
 CREATE POLICY "Public Profiles View" ON profiles FOR SELECT USING (true);
@@ -144,6 +186,23 @@ CREATE POLICY "Media View" ON media FOR SELECT USING (true);
 CREATE POLICY "Likes Manage" ON likes FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Comments Manage" ON comments FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Journals Manage" ON journals FOR ALL USING (auth.uid() = user_id);
+
+-- New Policies for PRD v2
+CREATE POLICY "Best Friends View" ON best_friends FOR SELECT USING (auth.uid() = user_id OR auth.uid() = friend_id);
+CREATE POLICY "Best Friends Manage" ON best_friends FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Chats View" ON chats FOR SELECT USING (
+  EXISTS (SELECT 1 FROM chat_participants WHERE chat_id = chats.id AND user_id = auth.uid())
+);
+
+CREATE POLICY "Chat Participants View" ON chat_participants FOR SELECT USING (
+  EXISTS (SELECT 1 FROM chat_participants cp WHERE cp.chat_id = chat_participants.chat_id AND cp.user_id = auth.uid())
+);
+
+CREATE POLICY "Messages View" ON messages FOR SELECT USING (
+  EXISTS (SELECT 1 FROM chat_participants WHERE chat_id = messages.chat_id AND user_id = auth.uid())
+);
+CREATE POLICY "Messages Send" ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
 -- Profile Trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
@@ -199,37 +258,37 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ======================================================================================
 -- CREATE THE 23 STUDENTS + ADMINS
 -- ======================================================================================
--- Password: Class10Memories!
+-- Password: [USE_A_SECURE_PASSWORD_HERE]
 
 DO $$
 BEGIN
-  -- MAIN ACCOUNTS
-  PERFORM create_classroom_user('aftab@classroomx.com', 'Class10Memories!', 'Aftab', 'admin');
-  PERFORM create_classroom_user('admin@classroomx.com', 'Class10Memories!', 'Class Admin', 'admin');
-  PERFORM create_classroom_user('teacher@classroomx.com', 'Class10Memories!', 'Class Teacher', 'teacher');
+  -- MAIN ACCOUNTS (Replace 'YOUR_SECURE_PASSWORD' with actual secure passwords)
+  PERFORM create_classroom_user('aftab@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Aftab', 'admin');
+  PERFORM create_classroom_user('admin@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Class Admin', 'admin');
+  PERFORM create_classroom_user('teacher@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Class Teacher', 'teacher');
   
   -- STUDENT LIST (Batch)
-  PERFORM create_classroom_user('aban@classroomx.com', 'Class10Memories!', 'Aban', 'student');
-  PERFORM create_classroom_user('student1@classroomx.com', 'Class10Memories!', 'Student 1', 'student');
-  PERFORM create_classroom_user('student2@classroomx.com', 'Class10Memories!', 'Student 2', 'student');
-  PERFORM create_classroom_user('student3@classroomx.com', 'Class10Memories!', 'Student 3', 'student');
-  PERFORM create_classroom_user('student4@classroomx.com', 'Class10Memories!', 'Student 4', 'student');
-  PERFORM create_classroom_user('student5@classroomx.com', 'Class10Memories!', 'Student 5', 'student');
-  PERFORM create_classroom_user('student6@classroomx.com', 'Class10Memories!', 'Student 6', 'student');
-  PERFORM create_classroom_user('student7@classroomx.com', 'Class10Memories!', 'Student 7', 'student');
-  PERFORM create_classroom_user('student8@classroomx.com', 'Class10Memories!', 'Student 8', 'student');
-  PERFORM create_classroom_user('student9@classroomx.com', 'Class10Memories!', 'Student 9', 'student');
-  PERFORM create_classroom_user('student10@classroomx.com', 'Class10Memories!', 'Student 10', 'student');
-  PERFORM create_classroom_user('student11@classroomx.com', 'Class10Memories!', 'Student 11', 'student');
-  PERFORM create_classroom_user('student12@classroomx.com', 'Class10Memories!', 'Student 12', 'student');
-  PERFORM create_classroom_user('student13@classroomx.com', 'Class10Memories!', 'Student 13', 'student');
-  PERFORM create_classroom_user('student14@classroomx.com', 'Class10Memories!', 'Student 14', 'student');
-  PERFORM create_classroom_user('student15@classroomx.com', 'Class10Memories!', 'Student 15', 'student');
-  PERFORM create_classroom_user('student16@classroomx.com', 'Class10Memories!', 'Student 16', 'student');
-  PERFORM create_classroom_user('student17@classroomx.com', 'Class10Memories!', 'Student 17', 'student');
-  PERFORM create_classroom_user('student18@classroomx.com', 'Class10Memories!', 'Student 18', 'student');
-  PERFORM create_classroom_user('student19@classroomx.com', 'Class10Memories!', 'Student 19', 'student');
-  PERFORM create_classroom_user('student20@classroomx.com', 'Class10Memories!', 'Student 20', 'student');
-  PERFORM create_classroom_user('student21@classroomx.com', 'Class10Memories!', 'Student 21', 'student');
-  PERFORM create_classroom_user('student22@classroomx.com', 'Class10Memories!', 'Student 23', 'student');
+  PERFORM create_classroom_user('aban@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Aban', 'student');
+  PERFORM create_classroom_user('student1@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 1', 'student');
+  PERFORM create_classroom_user('student2@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 2', 'student');
+  PERFORM create_classroom_user('student3@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 3', 'student');
+  PERFORM create_classroom_user('student4@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 4', 'student');
+  PERFORM create_classroom_user('student5@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 5', 'student');
+  PERFORM create_classroom_user('student6@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 6', 'student');
+  PERFORM create_classroom_user('student7@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 7', 'student');
+  PERFORM create_classroom_user('student8@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 8', 'student');
+  PERFORM create_classroom_user('student9@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 9', 'student');
+  PERFORM create_classroom_user('student10@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 10', 'student');
+  PERFORM create_classroom_user('student11@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 11', 'student');
+  PERFORM create_classroom_user('student12@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 12', 'student');
+  PERFORM create_classroom_user('student13@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 13', 'student');
+  PERFORM create_classroom_user('student14@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 14', 'student');
+  PERFORM create_classroom_user('student15@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 15', 'student');
+  PERFORM create_classroom_user('student16@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 16', 'student');
+  PERFORM create_classroom_user('student17@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 17', 'student');
+  PERFORM create_classroom_user('student18@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 18', 'student');
+  PERFORM create_classroom_user('student19@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 19', 'student');
+  PERFORM create_classroom_user('student20@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 20', 'student');
+  PERFORM create_classroom_user('student21@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 21', 'student');
+  PERFORM create_classroom_user('student22@classroomx.com', 'YOUR_SECURE_PASSWORD', 'Student 23', 'student');
 END $$;

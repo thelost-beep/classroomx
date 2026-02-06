@@ -34,6 +34,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (error) throw error;
             setProfile(data);
+
+            // Fetch theme and apply
+            const { data: settings } = await (supabase.from('user_settings') as any).select('theme').eq('id', userId).maybeSingle();
+            if (settings?.theme) {
+                document.documentElement.setAttribute('data-theme', settings.theme);
+            }
         } catch (error) {
             console.error('Error fetching profile:', error);
             setProfile(null);
