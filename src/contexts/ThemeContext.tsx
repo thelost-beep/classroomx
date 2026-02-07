@@ -41,8 +41,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('user_id', user.id)
                     .maybeSingle();
 
-                if (data && data.theme && !error) {
-                    setThemeState(data.theme as Theme);
+                if (data && (data as any).theme && !error) {
+                    setThemeState((data as any).theme as Theme);
                 }
             } catch (err) {
                 console.error('Error loading theme:', err);

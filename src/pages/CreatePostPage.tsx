@@ -15,7 +15,7 @@ const CreatePostPage: React.FC = () => {
     const [content, setContent] = useState('');
     const [activePostType, setActivePostType] = useState<PostType>('memory');
     const [mood, setMood] = useState('');
-    const [visibility, setVisibility] = useState<'class' | 'selected' | 'private'>('class');
+    const [visibility] = useState<'class' | 'selected' | 'private'>('class');
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);

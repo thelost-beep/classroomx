@@ -72,7 +72,7 @@ const ProfilePage: React.FC = () => {
                     .single();
 
                 if (privateData) {
-                    setProfile(prev => prev ? { ...prev, role: privateData.role } : null);
+                    setProfile(prev => prev ? { ...prev, role: (privateData as any).role } : null);
                 }
             }
 

@@ -161,7 +161,7 @@ const PostRenderer: React.FC<PostRendererProps> = ({ post, onUpdate }) => {
                                                     <Link to={`/profile/${tag.tagged_user_id}`} className="tag-link">
                                                         {tag.profiles?.name}
                                                     </Link>
-                                                    {idx < post.tags.length - 1 && ', '}
+                                                    {idx < (post.tags?.length || 0) - 1 && ', '}
                                                 </React.Fragment>
                                             ))}
                                         </span>

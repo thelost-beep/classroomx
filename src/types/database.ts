@@ -643,7 +643,7 @@ export interface PostWithDetails extends Post {
     media?: Media[];
     likes?: Like[];
     comments?: Comment[];
-    tags?: Tag[];
+    tags?: (Tag & { profiles?: Profile })[];
     is_liked?: boolean;
     like_count?: number;
     comment_count?: number;
